@@ -227,7 +227,14 @@
         };
 
         // Firebase 初始化
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+   const firebaseConfig = {
+  apiKey: "AIzaSyDiw3DZfPxEi_nrS9ELm_4ubHkTULEoT4E",
+  authDomain: "points-7deb9.firebaseapp.com",
+  projectId: "points-7deb9",
+  storageBucket: "points-7deb9.firebasestorage.app",
+  messagingSenderId: "972190061347",
+  appId: "1:972190061347:web:1ae05fb991014c36de3296"
+};
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const firestore = getFirestore(app);
