@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌸 學生日常表現點數管理系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- SheetJS (Excel Export) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        sakura: {
+                            50: '#fdf2f8',
+                            100: '#fce7f3',
+                            200: '#fbcfe8',
+                            300: '#f9a8d4',
+                            400: '#f472b6',
+                            500: '#ec4899',
+                            600: '#db2777',
+                            700: '#be185d',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #fdf2f8; /* sakura-50 */
+            color: #4a5568;
+            overflow-x: hidden;
+        }
+
+        /* 櫻花飄落特效 CSS */
+        .sakura-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: -1;
+            overflow: hidden;
+        }
+        .petal {
+            position: absolute;
+            background-color: #ffb7c5;
+            border-radius: 15px 0px 15px 0px;
+            opacity: 0.7;
+            animation: fall linear infinite;
+        }
+        @keyframes fall {
+            0% { top: -10%; transform: translateX(0) rotate(0deg); opacity: 0; }
+            10% { opacity: 0.8; }
+            90% { opacity: 0.8; }
+            100% { top: 110%; transform: translateX(100px) rotate(360deg); opacity: 0; }
+        }
+
+        /* 玻璃擬態面板 */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 183, 197, 0.4);
+            box-shadow: 0 10px 25px rgba(236, 72, 153, 0.1);
+        }
+        
+        /* 隱藏預設捲軸，美化 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #fdf2f8; }
+        ::-webkit-scrollbar-thumb { background: #fbcfe8; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #f9a8d4; }
+    </style>
+</head>
+<body class="min-h-screen relative flex flex-col">
+
+    <!-- 櫻花背景 -->
+    <div class="sakura-container" id="sakura-container"></div>
+
+    <!-- 載入中畫面 -->
+    <div id="loading-screen" class="fixed inset-0 bg-sakura-50 flex flex-col items-center justify-center z-50">
+        <i class="fas fa-spinner fa-spin text-sakura-400 text-5xl mb-4"></i>
+        <h2 class="text-sakura-600 text-xl font-medium">系統初始化中...</h2>
+    </div>
+
+    <!-- 登入鎖定畫面 -->
+    <div id="login-screen" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4">
+        <div class="glass-panel p-8 rounded-2xl w-full max-w-sm text-center transform transition-all duration-300">
+            <div class="w-20 h-20 mx-auto bg-sakura-100 rounded-full flex items-center justify-center mb-4 border-2 border-sakura-200">
+                <i class="fas fa-lock text-sakura-500 text-3xl"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-sakura-700 mb-2">點數管理系統</h1>
+            <p class="text-sm text-gray-500 mb-6">請輸入管理員密碼以進入系統 (預設密碼: admin)</p>
+            
+            <input type="password" id="login-password" class="w-full px-4 py-3 rounded-lg border border-sakura-200 focus:outline-none focus:ring-2 focus:ring-sakura-400 bg-white mb-4 text-center text-lg shadow-inner" placeholder="請輸入密碼">
+            
+            <button onclick="attemptLogin()" class="w-full bg-sakura-500 hover:bg-sakura-600 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-200 shadow-md">
+                <i class="fas fa-sign-in-alt mr-2"></i> 登入系統
+            </button>
+        </div>
+    </div>
+
+    <!-- 系統主畫面 -->
+    <div id="main-app" class="hidden flex-1 container mx-auto px-4 py-8 max-w-5xl">
+        <!-- 標題與導覽列 -->
+        <div class="glass-panel rounded-2xl p-6 mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center">
+                <i class="fas fa-leaf text-sakura-500 text-3xl mr-3"></i>
+                <div>
+                    <h1 class="text-2xl font-bold text-sakura-700 tracking-wide">學生日常表現點數管理</h1>
+                    <p class="text-sm text-gray-500">每週統一結算，輕鬆管理班級表現</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap gap-2 justify-center">
+                <button onclick="openAddStudentModal()" class="bg-white border-2 border-sakura-300 text-sakura-600 hover:bg-sakura-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm shadow-sm">
+                    <i class="fas fa-user-plus mr-1"></i> 新增學生
+                </button>
+                <button onclick="openImportModal()" class="bg-white border-2 border-sakura-300 text-sakura-600 hover:bg-sakura-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm shadow-sm">
+                    <i class="fas fa-file-import mr-1"></i> 大量匯入
+                </button>
+                <button onclick="exportToExcel()" class="bg-white border-2 border-sakura-300 text-sakura-600 hover:bg-sakura-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm shadow-sm">
+                    <i class="fas fa-file-excel mr-1"></i> 匯出 Excel
+                </button>
+                <button onclick="openSettingsModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg transition-colors font-medium text-sm">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button onclick="logout()" class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-lg transition-colors font-medium text-sm">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 學生列表區塊 -->
+        <div class="glass-panel rounded-2xl overflow-hidden shadow-lg border border-sakura-100">
+            <div class="bg-sakura-100 px-6 py-4 border-b border-sakura-200 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-sakura-700"><i class="fas fa-users mr-2"></i>本週表現結算表</h2>
+                <span class="text-sm text-sakura-600 font-medium bg-white px-3 py-1 rounded-full shadow-sm" id="student-count">共 0 位學生</span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-sakura-50 text-sakura-700 border-b-2 border-sakura-200">
+                            <th class="py-3 px-6 font-semibold w-16 text-center">座號</th>
+                            <th class="py-3 px-6 font-semibold">學生姓名</th>
+                            <th class="py-3 px-6 font-semibold text-center w-32">目前總點數</th>
+                            <th class="py-3 px-6 font-semibold text-center w-40 bg-sakura-100/50">本週加減點數</th>
+                            <th class="py-3 px-6 font-semibold text-center w-32">新總計預覽</th>
+                            <th class="py-3 px-6 font-semibold text-center w-24">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="student-tbody" class="text-gray-600">
+                        <!-- 動態產生學生列表 -->
+                    </tbody>
+                </table>
+                
+                <div id="empty-state" class="hidden p-12 text-center text-gray-400">
+                    <i class="fas fa-inbox text-5xl mb-4 text-sakura-200"></i>
+                    <p class="text-lg">目前沒有學生資料，請新增學生或使用大量匯入。</p>
+                </div>
+            </div>
+            
+            <div class="p-6 bg-white border-t border-sakura-100 flex justify-end">
+                <button onclick="saveAllWeeklyUpdates()" class="bg-sakura-500 hover:bg-sakura-600 text-white font-bold py-3 px-8 rounded-xl shadow-lg transform transition hover:scale-105 flex items-center">
+                    <i class="fas fa-save mr-2 text-xl"></i> 儲存本週所有點數變更
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK 匯入與邏輯 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 全域變數供 UI 存取
+        window.studentsData = [];
+        window.appPassword = 'admin'; // 預設密碼
+        window.currentUserId = null;
+        window.db = null;
+        window.appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // 建立櫻花特效
+        function createSakura() {
+            const container = document.getElementById('sakura-container');
+            for (let i = 0; i < 30; i++) {
+                let petal = document.createElement('div');
+                petal.classList.add('petal');
+                petal.style.left = Math.random() * 100 + 'vw';
+                petal.style.animationDuration = (Math.random() * 3 + 4) + 's';
+                petal.style.animationDelay = Math.random() * 5 + 's';
+                petal.style.width = (Math.random() * 10 + 10) + 'px';
+                petal.style.height = (Math.random() * 10 + 10) + 'px';
+                container.appendChild(petal);
+            }
+        }
+        createSakura();
+
+        // 顯示通知函式
+        window.showToast = (icon, title) => {
+            Swal.fire({
+                toast: true, position: 'top-end', showConfirmButton: false, timer: 2000,
+                icon: icon, title: title,
+                customClass: { popup: 'rounded-xl border border-sakura-200 shadow-lg' }
+            });
+        };
+
+        // UI 切換函式
+        const setScreen = (screenName) => {
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById(screenName).classList.remove('hidden');
+        };
+
+        // Firebase 初始化
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const firestore = getFirestore(app);
+        window.db = firestore;
+
+        let unsubscribeStudents = null;
+
+        // 初始化驗證
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error:", error);
+                showToast('error', '驗證失敗，請重試');
+            }
+        };
+
+        // 載入應用程式設定 (密碼)
+        const loadAppConfig = async (uid) => {
+            const configRef = doc(firestore, 'artifacts', window.appId, 'users', uid, 'settings', 'auth_config');
+            try {
+                const configSnap = await getDoc(configRef);
+                if (configSnap.exists()) {
+                    window.appPassword = configSnap.data().password;
+                } else {
+                    // 若無設定檔，建立預設
+                    await setDoc(configRef, { password: 'admin' });
+                }
+            } catch (error) {
+                console.error("Config error", error);
+            }
+        };
+
+        // 監聽即時學生資料
+        const subscribeToStudents = (uid) => {
+            if (unsubscribeStudents) unsubscribeStudents();
+            
+            const studentsRef = collection(firestore, 'artifacts', window.appId, 'users', uid, 'students');
+            unsubscribeStudents = onSnapshot(studentsRef, (snapshot) => {
+                const list = [];
+                snapshot.forEach(doc => {
+                    list.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // 依座號排序，若無座號則依姓名
+                list.sort((a, b) => {
+                    if (a.number && b.number) return parseInt(a.number) - parseInt(b.number);
+                    return a.name.localeCompare(b.name);
+                });
+                
+                window.studentsData = list;
+                renderStudentTable();
+            }, (error) => {
+                console.error("Listen failed: ", error);
+            });
+        };
+
+        // 驗證狀態改變監聽
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                window.currentUserId = user.uid;
+                await loadAppConfig(user.uid);
+                
+                // 檢查是否已在目前 Session 解鎖過
+                if (sessionStorage.getItem('app_unlocked') === 'true') {
+                    setScreen('main-app');
+                    subscribeToStudents(user.uid);
+                } else {
+                    setScreen('login-screen');
+                }
+            } else {
+                setScreen('loading-screen');
+            }
+        });
+
+        // 啟動流程
+        initAuth();
+
+        // ------------------ 業務邏輯與全域綁定 ------------------
+
+        // 嘗試登入 (解鎖應用)
+        window.attemptLogin = () => {
+            const pwdInput = document.getElementById('login-password').value;
+            if (pwdInput === window.appPassword) {
+                sessionStorage.setItem('app_unlocked', 'true');
+                setScreen('main-app');
+                subscribeToStudents(window.currentUserId);
+                document.getElementById('login-password').value = '';
+                showToast('success', '登入成功');
+            } else {
+                Swal.fire({ icon: 'error', title: '密碼錯誤', text: '請重新輸入！', confirmButtonColor: '#f472b6' });
+            }
+        };
+
+        // 綁定 Enter 鍵登入
+        document.getElementById('login-password').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') window.attemptLogin();
+        });
+
+        // 登出鎖定
+        window.logout = () => {
+            sessionStorage.removeItem('app_unlocked');
+            setScreen('login-screen');
+            if (unsubscribeStudents) unsubscribeStudents();
+            window.studentsData = [];
+            document.getElementById('student-tbody').innerHTML = '';
+            showToast('info', '已登出並鎖定系統');
+        };
+
+        // 渲染表格
+        const renderStudentTable = () => {
+            const tbody = document.getElementById('student-tbody');
+            const emptyState = document.getElementById('empty-state');
+            const countLabel = document.getElementById('student-count');
+            
+            countLabel.innerText = `共 ${window.studentsData.length} 位學生`;
+            
+            if (window.studentsData.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            let html = '';
+            
+            window.studentsData.forEach((student, index) => {
+                const total = student.totalPoints || 0;
+                const stuNum = student.number || (index + 1);
+                
+                html += `
+                <tr class="border-b border-sakura-100 hover:bg-sakura-50/50 transition-colors">
+                    <td class="py-3 px-6 text-center text-gray-500">${stuNum}</td>
+                    <td class="py-3 px-6 font-bold text-gray-700">${student.name}</td>
+                    <td class="py-3 px-6 text-center font-semibold text-lg text-sakura-600">${total}</td>
+                    <td class="py-3 px-6 text-center bg-sakura-100/30">
+                        <input type="number" 
+                            class="adjustment-input w-24 text-center px-3 py-2 border border-sakura-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sakura-400 font-bold" 
+                            data-id="${student.id}" 
+                            data-total="${total}"
+                            value="0"
+                            placeholder="+/-">
+                    </td>
+                    <td class="py-3 px-6 text-center font-bold text-xl text-blue-500 preview-total" id="preview-${student.id}">${total}</td>
+                    <td class="py-3 px-6 text-center">
+                        <button onclick="confirmDelete('${student.id}', '${student.name}')" class="text-red-400 hover:text-red-600 transition-colors p-2" title="刪除學生">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            });
+            
+            tbody.innerHTML = html;
+        };
+
+        // 監聽所有輸入框即時預覽總計
+        document.getElementById('student-tbody').addEventListener('input', (e) => {
+            if (e.target.classList.contains('adjustment-input')) {
+                const id = e.target.dataset.id;
+                const currentTotal = parseInt(e.target.dataset.total) || 0;
+                const adjustment = parseInt(e.target.value) || 0;
+                const newTotal = currentTotal + adjustment;
+                
+                const previewEl = document.getElementById(`preview-${id}`);
+                previewEl.innerText = newTotal;
+                
+                if (adjustment > 0) previewEl.className = 'py-3 px-6 text-center font-bold text-xl text-green-500 preview-total';
+                else if (adjustment < 0) previewEl.className = 'py-3 px-6 text-center font-bold text-xl text-red-500 preview-total';
+                else previewEl.className = 'py-3 px-6 text-center font-bold text-xl text-blue-500 preview-total';
+            }
+        });
+
+        // 大量儲存每週變更
+        window.saveAllWeeklyUpdates = async () => {
+            if (!window.currentUserId) return;
+            
+            const inputs = document.querySelectorAll('.adjustment-input');
+            let updatesCount = 0;
+            const batch = writeBatch(window.db);
+            
+            inputs.forEach(input => {
+                const adjust = parseInt(input.value);
+                if (adjust && adjust !== 0) { // 如果有填寫且不為 0
+                    const id = input.dataset.id;
+                    const student = window.studentsData.find(s => s.id === id);
+                    if (student) {
+                        const newTotal = (student.totalPoints || 0) + adjust;
+                        const docRef = doc(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students', id);
+                        batch.update(docRef, { totalPoints: newTotal });
+                        updatesCount++;
+                    }
+                }
+            });
+            
+            if (updatesCount === 0) {
+                showToast('info', '沒有偵測到任何點數變更');
+                return;
+            }
+            
+            try {
+                // 顯示載入中
+                Swal.fire({
+                    title: '儲存中...', text: '正在將本週點數更新至雲端',
+                    allowOutsideClick: false, didOpen: () => { Swal.showLoading(); }
+                });
+                
+                await batch.commit();
+                Swal.fire({
+                    icon: 'success', title: '更新成功！',
+                    text: `已成功更新 ${updatesCount} 位學生的點數。`,
+                    confirmButtonColor: '#f472b6', timer: 2000
+                });
+                // 畫面會在 onSnapshot 自動重新渲染並清空 input
+            } catch (error) {
+                console.error("Batch update error:", error);
+                Swal.fire('錯誤', '更新失敗，請稍後再試。', 'error');
+            }
+        };
+
+        // 新增單一學生
+        window.openAddStudentModal = async () => {
+            const { value: formValues } = await Swal.fire({
+                title: '新增學生',
+                html:
+                    `<input id="swal-num" class="swal2-input" placeholder="座號 (選填)" type="number">` +
+                    `<input id="swal-name" class="swal2-input" placeholder="學生姓名 (必填)">` +
+                    `<input id="swal-points" class="swal2-input" placeholder="初始總點數 (預設0)" type="number">`,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonColor: '#f472b6',
+                cancelButtonColor: '#d1d5db',
+                confirmButtonText: '新增',
+                cancelButtonText: '取消',
+                preConfirm: () => {
+                    const name = document.getElementById('swal-name').value;
+                    if (!name) {
+                        Swal.showValidationMessage('請輸入學生姓名');
+                        return false;
+                    }
+                    return {
+                        number: document.getElementById('swal-num').value || '',
+                        name: name,
+                        totalPoints: parseInt(document.getElementById('swal-points').value) || 0
+                    }
+                }
+            });
+            
+            if (formValues && window.currentUserId) {
+                try {
+                    const newRef = doc(collection(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students'));
+                    await setDoc(newRef, formValues);
+                    showToast('success', '已成功新增學生');
+                } catch (error) {
+                    console.error("Add error:", error);
+                    showToast('error', '新增失敗');
+                }
+            }
+        };
+
+        // 刪除學生
+        window.confirmDelete = (id, name) => {
+            Swal.fire({
+                title: '確定要刪除嗎？',
+                text: `即將刪除學生「${name}」的所有紀錄，此操作無法復原。`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#d1d5db',
+                confirmButtonText: '是的，刪除',
+                cancelButtonText: '取消'
+            }).then(async (result) => {
+                if (result.isConfirmed && window.currentUserId) {
+                    try {
+                        await deleteDoc(doc(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students', id));
+                        showToast('success', '已刪除學生');
+                    } catch (error) {
+                        console.error("Delete error", error);
+                        showToast('error', '刪除失敗');
+                    }
+                }
+            });
+        };
+
+        // 開啟系統設定 (修改密碼)
+        window.openSettingsModal = async () => {
+            const { value: newPassword } = await Swal.fire({
+                title: '系統設定',
+                text: '修改管理員登入密碼',
+                input: 'password',
+                inputPlaceholder: '請輸入新密碼',
+                inputAttributes: {
+                    autocapitalize: 'off',
+                    autocorrect: 'off'
+                },
+                showCancelButton: true,
+                confirmButtonColor: '#f472b6',
+                cancelButtonText: '取消',
+                confirmButtonText: '更新密碼',
+                inputValidator: (value) => {
+                    if (!value) return '密碼不能為空！';
+                    if (value.length < 4) return '密碼長度至少4碼！';
+                }
+            });
+
+            if (newPassword && window.currentUserId) {
+                try {
+                    const configRef = doc(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'settings', 'auth_config');
+                    await setDoc(configRef, { password: newPassword });
+                    window.appPassword = newPassword;
+                    Swal.fire({ icon: 'success', title: '修改成功', text: '下次登入請使用新密碼', confirmButtonColor: '#f472b6' });
+                } catch (error) {
+                    console.error("Update pwd error", error);
+                    showToast('error', '密碼修改失敗');
+                }
+            }
+        };
+
+        // 大量匯入 Modal (文字/CSV貼上)
+        window.openImportModal = async () => {
+            const { value: pastedData } = await Swal.fire({
+                title: '大量匯入名單與點數',
+                html: `
+                    <p class="text-sm text-gray-500 mb-2 text-left">請從 Excel 或文字檔複製貼上。<br>格式：<b>姓名</b> 或 <b>姓名,點數</b> 或 <b>座號,姓名,點數</b> (分隔符號可用逗號或空白)</p>
+                    <textarea id="import-text" class="swal2-textarea" style="margin:0; height: 150px; font-size: 14px;" placeholder="王小明, 10\n李小華, 20\n陳大文"></textarea>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '確認匯入',
+                cancelButtonText: '取消',
+                confirmButtonColor: '#f472b6',
+                preConfirm: () => {
+                    const text = document.getElementById('import-text').value;
+                    if (!text.trim()) {
+                        Swal.showValidationMessage('請輸入或貼上資料');
+                        return false;
+                    }
+                    return text;
+                }
+            });
+
+            if (pastedData && window.currentUserId) {
+                // 解析文字
+                const lines = pastedData.split('\n').filter(line => line.trim() !== '');
+                const batch = writeBatch(window.db);
+                let addedCount = 0;
+
+                lines.forEach(line => {
+                    // 支援 tab 或 逗號或全形逗號 分隔
+                    const parts = line.split(/[\t,，]+/).map(p => p.trim()).filter(p => p !== '');
+                    if (parts.length > 0) {
+                        let num = '';
+                        let name = '';
+                        let pts = 0;
+
+                        if (parts.length === 1) {
+                            name = parts[0];
+                        } else if (parts.length === 2) {
+                            // 判斷第一項是不是數字(座號)，還是第二項是數字(點數)
+                            if (!isNaN(parts[1])) {
+                                name = parts[0];
+                                pts = parseInt(parts[1]) || 0;
+                            } else {
+                                num = parts[0];
+                                name = parts[1];
+                            }
+                        } else if (parts.length >= 3) {
+                            num = parts[0];
+                            name = parts[1];
+                            pts = parseInt(parts[2]) || 0;
+                        }
+
+                        if (name) {
+                            const newRef = doc(collection(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students'));
+                            batch.set(newRef, { number: num, name: name, totalPoints: pts });
+                            addedCount++;
+                        }
+                    }
+                });
+
+                if (addedCount > 0) {
+                    Swal.fire({
+                        title: '匯入中...', allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+                    try {
+                        await batch.commit();
+                        Swal.fire('成功', `成功匯入 ${addedCount} 筆學生資料！`, 'success');
+                    } catch (error) {
+                        console.error("Import error", error);
+                        Swal.fire('錯誤', '資料匯入失敗', 'error');
+                    }
+                } else {
+                    Swal.fire('提示', '無法解析您貼上的資料格式', 'warning');
+                }
+            }
+        };
+
+        // 匯出 Excel
+        window.exportToExcel = () => {
+            if (window.studentsData.length === 0) {
+                Swal.fire('提示', '目前沒有資料可供匯出', 'info');
+                return;
+            }
+
+            const exportData = window.studentsData.map((s, index) => ({
+                '座號': s.number || (index + 1),
+                '學生姓名': s.name,
+                '累積總點數': s.totalPoints || 0
+            }));
+
+            // 建立工作表
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            // 建立活頁簿
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "學生點數紀錄");
+            
+            // 產生檔名 (加上日期)
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}${(today.getMonth()+1).toString().padStart(2,'0')}${today.getDate().toString().padStart(2,'0')}`;
+            
+            // 觸發下載
+            XLSX.writeFile(workbook, `班級點數紀錄_${dateStr}.xlsx`);
+            showToast('success', 'Excel 匯出成功');
+        };
+
+    </script>
+</body>
+</html>
