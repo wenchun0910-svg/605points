@@ -101,7 +101,7 @@
                 <i class="fas fa-lock text-sakura-500 text-3xl"></i>
             </div>
             <h1 class="text-2xl font-bold text-sakura-700 mb-2">點數管理系統</h1>
-            <p class="text-sm text-gray-500 mb-6">請輸入管理員密碼以進入系統 </p>
+            <p class="text-sm text-gray-500 mb-6">請輸入管理員密碼以進入系統 (預設密碼: admin)</p>
             
             <input type="password" id="login-password" class="w-full px-4 py-3 rounded-lg border border-sakura-200 focus:outline-none focus:ring-2 focus:ring-sakura-400 bg-white mb-4 text-center text-lg shadow-inner" placeholder="請輸入密碼">
             
@@ -227,7 +227,7 @@
         };
 
         // Firebase 初始化
-   const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyDiw3DZfPxEi_nrS9ELm_4ubHkTULEoT4E",
   authDomain: "points-7deb9.firebaseapp.com",
   projectId: "points-7deb9",
@@ -235,6 +235,7 @@
   messagingSenderId: "972190061347",
   appId: "1:972190061347:web:1ae05fb991014c36de3296"
 };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const firestore = getFirestore(app);
@@ -258,7 +259,8 @@
 
         // 載入應用程式設定 (密碼)
         const loadAppConfig = async (uid) => {
-            const configRef = doc(firestore, 'artifacts', window.appId, 'users', uid, 'settings', 'auth_config');
+            // 改為讀取共享區的設定
+            const configRef = doc(firestore, 'artifacts', window.appId, 'public', 'data', 'settings', 'auth_config');
             try {
                 const configSnap = await getDoc(configRef);
                 if (configSnap.exists()) {
@@ -276,7 +278,8 @@
         const subscribeToStudents = (uid) => {
             if (unsubscribeStudents) unsubscribeStudents();
             
-            const studentsRef = collection(firestore, 'artifacts', window.appId, 'users', uid, 'students');
+            // 改為讀取共享區的學生資料
+            const studentsRef = collection(firestore, 'artifacts', window.appId, 'public', 'data', 'students');
             unsubscribeStudents = onSnapshot(studentsRef, (snapshot) => {
                 const list = [];
                 snapshot.forEach(doc => {
@@ -426,7 +429,8 @@
                     const student = window.studentsData.find(s => s.id === id);
                     if (student) {
                         const newTotal = (student.totalPoints || 0) + adjust;
-                        const docRef = doc(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students', id);
+                        // 改為更新共享區的學生資料
+                        const docRef = doc(window.db, 'artifacts', window.appId, 'public', 'data', 'students', id);
                         batch.update(docRef, { totalPoints: newTotal });
                         updatesCount++;
                     }
@@ -488,7 +492,8 @@
             
             if (formValues && window.currentUserId) {
                 try {
-                    const newRef = doc(collection(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students'));
+                    // 改為新增至共享區
+                    const newRef = doc(collection(window.db, 'artifacts', window.appId, 'public', 'data', 'students'));
                     await setDoc(newRef, formValues);
                     showToast('success', '已成功新增學生');
                 } catch (error) {
@@ -512,7 +517,8 @@
             }).then(async (result) => {
                 if (result.isConfirmed && window.currentUserId) {
                     try {
-                        await deleteDoc(doc(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students', id));
+                        // 改為刪除共享區的資料
+                        await deleteDoc(doc(window.db, 'artifacts', window.appId, 'public', 'data', 'students', id));
                         showToast('success', '已刪除學生');
                     } catch (error) {
                         console.error("Delete error", error);
@@ -545,7 +551,8 @@
 
             if (newPassword && window.currentUserId) {
                 try {
-                    const configRef = doc(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'settings', 'auth_config');
+                    // 改為更新共享區的密碼設定
+                    const configRef = doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'auth_config');
                     await setDoc(configRef, { password: newPassword });
                     window.appPassword = newPassword;
                     Swal.fire({ icon: 'success', title: '修改成功', text: '下次登入請使用新密碼', confirmButtonColor: '#f472b6' });
@@ -610,7 +617,8 @@
                         }
 
                         if (name) {
-                            const newRef = doc(collection(window.db, 'artifacts', window.appId, 'users', window.currentUserId, 'students'));
+                            // 改為大量新增至共享區
+                            const newRef = doc(collection(window.db, 'artifacts', window.appId, 'public', 'data', 'students'));
                             batch.set(newRef, { number: num, name: name, totalPoints: pts });
                             addedCount++;
                         }
